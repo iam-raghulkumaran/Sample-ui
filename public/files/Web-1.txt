@@ -1,0 +1,504 @@
+sqllocaldb info
+
+
+
+CREATE DATABASE Test_KGL;
+GO
+USE Test_KGL;
+GO
+
+-- 1. User_Master
+CREATE TABLE User_Master
+(
+    UserId    INT PRIMARY KEY,
+    Username  VARCHAR(50) NOT NULL,
+    [Password] VARCHAR(50) NOT NULL,
+    UserRole  VARCHAR(20) NOT NULL
+);
+
+INSERT INTO User_Master (UserId, Username, [Password], UserRole) VALUES
+(1, 'admin1', 'xxx', 'admin'),
+(2, 'User', 'xxx', 'user'),
+(3, 'superadmin1', 'xxx', 'super'),
+(4, 'superadmin2', 'xxx', 'super'),
+(5, 'admin2', 'xxx', 'admin'),
+(9, 'testvendor', 'xxx', 'vendor');
+
+-- 2. Dept_Master
+CREATE TABLE Dept_Master
+(
+    DeptCode INT PRIMARY KEY,
+    DeptName VARCHAR(100),
+    DeptSN   VARCHAR(50)
+);
+
+INSERT INTO Dept_Master (DeptCode, DeptName, DeptSN) VALUES
+(10, 'Pagination', 'Pgn'),
+(20, 'Content Inspection', 'Login'),
+(30, 'Pre-Edit', 'Pre-Edit'),
+(40, 'Copy Editing', 'CE');
+
+-- 3. Vendor_Master
+CREATE TABLE Vendor_Master
+(
+    VendorID   INT PRIMARY KEY,
+    VendorName VARCHAR(100) NOT NULL
+);
+
+INSERT INTO Vendor_Master (VendorID, VendorName) VALUES
+(1, 'Oup'),
+(2, 'Wiley'),
+(3, 'SAGE'),
+(4, 'TF'),
+(5, 'Pf'),
+(6, 'De');
+
+-- 4. ArticleInfo
+CREATE TABLE ArticleInfo
+(
+    AutoArtID   VARCHAR(20) PRIMARY KEY,
+    JBM_AutoID  VARCHAR(20),
+    IntrnlID    VARCHAR(20),
+    ChapterID   VARCHAR(20),
+    ActualPages INT,
+    DeptCode    INT FOREIGN KEY REFERENCES Dept_Master(DeptCode),
+    VendorID    INT NULL FOREIGN KEY REFERENCES Vendor_Master(VendorID)
+);
+
+INSERT INTO ArticleInfo (AutoArtID, JBM_AutoID, IntrnlID, ChapterID, ActualPages, DeptCode, VendorID) VALUES
+('U0302', 'OP031', '120004', 'dyr226', 13, 10, NULL),
+('U0305', 'OP031', '120007', 'dys001', 13, 10, 2),
+('U0326', 'OP031', '120028', 'dys077', 10, 20, NULL),
+('U0327', 'OP031', '120029', 'dys078', 16, 20, NULL),
+('U0923', 'OP098', '120001', 'hhs064', 43, 30, NULL),
+('U0924', 'OP098', '120002', 'hhs067', 43, 40, NULL);
+
+
+USE Test_KGL;
+GO
+
+-- Login
+CREATE PROCEDURE sp_ValidateUser
+    @Username VARCHAR(50),
+    @Password VARCHAR(50)
+AS
+BEGIN
+    SELECT UserId, Username, UserRole
+    FROM User_Master
+    WHERE Username = @Username AND [Password] = @Password;
+END
+GO
+
+-- Get all articles + joined master data
+CREATE PROCEDURE sp_GetArticles
+AS
+BEGIN
+    SELECT 
+        A.AutoArtID,
+        A.JBM_AutoID,
+        A.IntrnlID,
+        A.ChapterID,
+        A.ActualPages,
+        A.DeptCode,
+        D.DeptName,
+        A.VendorID,
+        V.VendorName
+    FROM ArticleInfo A
+    LEFT JOIN Dept_Master D ON A.DeptCode = D.DeptCode
+    LEFT JOIN Vendor_Master V ON A.VendorID = V.VendorID;
+END
+GO
+
+-- Get vendors
+CREATE PROCEDURE sp_GetVendors
+AS
+BEGIN
+    SELECT VendorID, VendorName FROM Vendor_Master;
+END
+GO
+
+-- Update a single article
+CREATE PROCEDURE sp_UpdateArticle
+    @AutoArtID   VARCHAR(20),
+    @DeptCode    INT,
+    @VendorID    INT,
+    @ActualPages INT
+AS
+BEGIN
+    UPDATE ArticleInfo
+    SET DeptCode = @DeptCode,
+        VendorID = @VendorID,
+        ActualPages = @ActualPages
+    WHERE AutoArtID = @AutoArtID;
+END
+GO
+
+-- Update Vendor only (for checkbox assign)
+CREATE PROCEDURE sp_UpdateArticleVendor
+    @AutoArtID VARCHAR(20),
+    @VendorID  INT
+AS
+BEGIN
+    UPDATE ArticleInfo
+    SET VendorID = @VendorID
+    WHERE AutoArtID = @AutoArtID;
+END
+GO
+
+
+step -2 
+Open Tools → NuGet Package Manager → Manage NuGet Packages
+Microsoft.Data.SqlClient
+System.Data.SqlClient
+Microsoft.AspNetCore.Authentication.Cookies
+
+step - 3 
+ "ConnectionStrings": {
+    "DefaultConnection": "Server=.;Database=Test_KGL;Trusted_Connection=True;TrustServerCertificate=True"
+  },
+
+STEP 3 – Create Models (Models Folder)
+ Models
+UserModel.cs
+
+public class UserModel
+{
+    public int UserId { get; set; }
+    public string Username { get; set; }
+    public string Password { get; set; }
+    public string UserRole { get; set; }
+}
+
+VendorModel.cs
+public class VendorModel
+{
+    public int VendorID { get; set; }
+    public string VendorName { get; set; }
+}
+
+DeptModel.cs
+public class DeptModel
+{
+    public int DeptCode { get; set; }
+    public string DeptName { get; set; }
+    public string DeptSN { get; set; }
+}
+
+ArticleModel.cs
+
+using System.Text.Json.Serialization;
+
+namespace Web1.Models
+{
+    public class ArticleModel
+    {
+        public string AutoArtID { get; set; }
+
+        [JsonPropertyName("jbmAutoID")]
+        public string JBM_AutoID { get; set; }
+
+        public string IntrnlID { get; set; }
+        public string ChapterID { get; set; }
+        public int ActualPages { get; set; }
+        public string DeptName { get; set; }
+        public string VendorName { get; set; }
+    }
+
+}
+
+STEP 4 – Create Data Access Layer (ADO.NET)
+Create new folder: DAL
+
+ DAL/DbHelper.cs
+
+ using Microsoft.Data.SqlClient;
+using System.Data;
+
+public class DbHelper
+{
+    private readonly IConfiguration _config;
+
+    public DbHelper(IConfiguration config)
+    {
+        _config = config;
+    }
+
+    private SqlConnection GetConnection()
+    {
+        return new SqlConnection(_config.GetConnectionString("DefaultConnection"));
+    }
+
+    public DataTable ExecuteDataTable(string procName, SqlParameter[] parameters = null)
+    {
+        using var con = GetConnection();
+        using var cmd = new SqlCommand(procName, con);
+        cmd.CommandType = CommandType.StoredProcedure;
+
+        if (parameters != null)
+            cmd.Parameters.AddRange(parameters);
+
+        var dt = new DataTable();
+        using var da = new SqlDataAdapter(cmd);
+        da.Fill(dt);
+        return dt;
+    }
+
+    public int ExecuteNonQuery(string procName, SqlParameter[] parameters)
+    {
+        using var con = GetConnection();
+        using var cmd = new SqlCommand(procName, con);
+        cmd.CommandType = CommandType.StoredProcedure;
+
+        if (parameters != null)
+            cmd.Parameters.AddRange(parameters);
+
+        con.Open();
+        return cmd.ExecuteNonQuery();
+    }
+}
+
+
+STEP 5 – Register Services (Program.cs)
+
+📄 Program.cs
+
+using Microsoft.AspNetCore.Authentication.Cookies;
+
+var builder = WebApplication.CreateBuilder(args);
+
+// MVC + API
+builder.Services.AddControllersWithViews();
+builder.Services.AddControllers();
+
+// DbHelper
+builder.Services.AddScoped<DbHelper>();
+
+// Forms Authentication (Cookie)
+builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+.AddCookie(options =>
+{
+    options.LoginPath = "/Account/Login";
+});
+
+var app = builder.Build();
+
+app.UseStaticFiles();
+app.UseRouting();
+
+app.UseAuthentication();
+app.UseAuthorization();
+
+app.MapControllerRoute(
+    name: "default",
+    pattern: "{controller=Account}/{action=Login}/{id?}");
+
+app.MapControllers();
+
+app.Run();
+
+
+STEP 6 – Account Controller (Login)
+
+Controllers
+
+Create AccountController.cs
+
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Data.SqlClient;
+using System.Security.Claims;
+
+public class AccountController : Controller
+{
+    private readonly DbHelper _db;
+
+    public AccountController(DbHelper db)
+    {
+        _db = db;
+    }
+
+    [HttpGet]
+    public IActionResult Login()
+    {
+        return View();
+    }
+
+    [HttpPost]
+    public IActionResult Login(string username, string password)
+    {
+        var dt = _db.ExecuteDataTable("sp_ValidateUser",
+            new SqlParameter[] {
+                new("@Username", username),
+                new("@Password", password)
+            });
+
+        if (dt.Rows.Count == 1)
+        {
+            var claims = new List<Claim>
+            {
+                new Claim(ClaimTypes.Name, username)
+            };
+
+            var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
+            var principal = new ClaimsPrincipal(identity);
+
+            HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, principal);
+
+            return RedirectToAction("Index", "Home");
+        }
+
+        ViewBag.Error = "Invalid login";
+        return View();
+    }
+
+    public IActionResult Logout()
+    {
+        HttpContext.SignOutAsync();
+        return RedirectToAction("Login");
+    }
+}
+
+Views/Account/Login.cshtml
+<form method="post">
+    <input name="username" placeholder="Username" />
+    <input name="password" type="password" placeholder="Password" />
+    <button type="submit">Login</button>
+    <span style="color:red">@ViewBag.Error</span>
+</form>
+
+
+STEP 7 – Basic Authentication for Web API
+
+Create folder: Filters
+
+Filters/BasicAuthAttribute.cs
+
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Filters;
+using Microsoft.Data.SqlClient;
+using System.Net;
+using System.Text;
+
+public class BasicAuthAttribute : Attribute, IAuthorizationFilter
+{
+    public void OnAuthorization(AuthorizationFilterContext context)
+    {
+        var db = context.HttpContext.RequestServices.GetService<DbHelper>();
+
+        var header = context.HttpContext.Request.Headers["Authorization"].ToString();
+        if (string.IsNullOrEmpty(header) || !header.StartsWith("Basic "))
+        {
+            context.Result = new UnauthorizedResult();
+            return;
+        }
+
+        var encoded = header.Replace("Basic ", "");
+        var decoded = Encoding.UTF8.GetString(Convert.FromBase64String(encoded));
+        var parts = decoded.Split(':');
+
+        var dt = db.ExecuteDataTable("sp_ValidateUser",
+            new SqlParameter[] {
+                new("@Username", parts[0]),
+                new("@Password", parts[1])
+            });
+
+        if (dt.Rows.Count == 0)
+            context.Result = new UnauthorizedResult();
+    }
+}
+
+
+STEP 8 – Web API Controllers
+
+Controllers/ArticleApiController.cs
+
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Data.SqlClient;
+
+[Route("api/article")]
+[ApiController]
+[BasicAuth]
+public class ArticleApiController : ControllerBase
+{
+    private readonly DbHelper _db;
+
+    public ArticleApiController(DbHelper db)
+    {
+        _db = db;
+    }
+
+    [HttpGet]
+    public IActionResult GetArticles()
+    {
+        var dt = _db.ExecuteDataTable("sp_GetArticles");
+        return Ok(dt);
+    }
+
+    [HttpPost("assign")]
+    public IActionResult AssignVendor(string autoArtId, int vendorId)
+    {
+        _db.ExecuteNonQuery("sp_UpdateArticleVendor",
+            new SqlParameter[] {
+                new("@AutoArtID", autoArtId),
+                new("@VendorID", vendorId)
+            });
+
+        return Ok();
+    }
+}
+
+
+STEP 9 – Home Page + jQuery DataTable
+Controllers/HomeController.cs
+
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+
+[Authorize]
+public class HomeController : Controller
+{
+    public IActionResult Index()
+    {
+        return View();
+    }
+}
+
+Views/Home/Index.cshtml
+
+
+Web1
+│
+├── Controllers
+│   ├── AccountController.cs      ✅ MVC (Login)
+│   ├── ArticleApiController.cs   ✅ Web API
+│   └── HomeController.cs         ✅ MVC
+│
+├── DAL
+│   └── DbHelper.cs               ✅ DB access (Stored Procedures)
+│
+├── Filters
+│   └── BasicAuthAttribute.cs     ✅ API Authentication
+│
+├── Models
+│   ├── ArticleModel.cs
+│   ├── DeptModel.cs
+│   ├── UserModel.cs
+│   ├── VendorModel.cs
+│   └── ErrorViewModel.cs
+│
+├── Views
+│   ├── Account
+│   │   └── Login.cshtml          ✅
+│   ├── Home
+│   │   ├── Index.cshtml          ✅ (DataTable page)
+│   │   └── Privacy.cshtml        ✅ (optional)
+│   ├── Shared
+│   │   ├── _Layout.cshtml
+│   │   ├── _ValidationScriptsPartial.cshtml
+│   │   └── Error.cshtml
+│   ├── _ViewImports.cshtml
+│   └── _ViewStart.cshtml
+│
+├── appsettings.json              ✅ Connection string
+└── Program.cs                    ✅ Auth, routing, DI

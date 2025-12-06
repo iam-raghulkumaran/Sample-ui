@@ -1,0 +1,557 @@
+USE KGL_Test
+GO
+
+CREATE TABLE ArticleInfo (
+    ID INT PRIMARY KEY,
+    JournalID VARCHAR(20) NOT NULL,
+    ArticleID VARCHAR(20) NOT NULL
+);
+GO
+
+INSERT INTO ArticleInfo (ID, JournalID, ArticleID) VALUES
+(1, 'CJHR', 'dyr226'),
+(2, 'BECJ', 'dys001'),
+(3, 'BSMS', 'dys077'),
+(4, 'BSMS', 'dys078'),
+(5, 'CAMH', 'hhs064'),
+(6, 'CAMH', 'hhs067');
+GO
+
+CREATE TABLE FigureDetails (
+    SeqID INT IDENTITY(1,1) PRIMARY KEY,
+    ArticleID VARCHAR(20) NOT NULL,
+    FigureName VARCHAR(50) NOT NULL,
+    Mode VARCHAR(20) NOT NULL,
+    FigNo VARCHAR(10) NOT NULL,
+    PageNo INT NOT NULL,
+    IsColor BIT NOT NULL
+);
+GO
+
+SELECT * FROM ArticleInfo;
+SELECT * FROM FigureDetails;
+
+CREATE PROCEDURE usp_GetJournalIDs
+AS
+BEGIN
+    SELECT DISTINCT JournalID
+    FROM ArticleInfo
+    ORDER BY JournalID;
+END;
+GO
+
+CREATE PROCEDURE usp_GetArticleIDsByJournal
+    @JournalID VARCHAR(20)
+AS
+BEGIN
+    SELECT ArticleID
+    FROM ArticleInfo
+    WHERE JournalID = @JournalID
+    ORDER BY ArticleID;
+END;
+GO
+
+CREATE PROCEDURE usp_InsertFigures
+    @ArticleID VARCHAR(20),
+    @SubType VARCHAR(20),    -- Fig / Scheme / Suppl Fig
+    @Mode VARCHAR(20),       -- Color / LineArt / 3D
+    @NoOfFigs INT,
+    @StartPageNo INT,
+    @IsColor BIT
+AS
+BEGIN
+    DECLARE @i INT = 1;
+
+    WHILE @i <= @NoOfFigs
+    BEGIN
+        INSERT INTO FigureDetails
+        (
+            ArticleID,
+            FigureName,
+            Mode,
+            FigNo,
+            PageNo,
+            IsColor
+        )
+        VALUES
+        (
+            @ArticleID,
+            CONCAT(@SubType, @i),
+            @Mode,
+            CAST(@i AS VARCHAR),
+            @StartPageNo + (@i - 1),
+            @IsColor
+        );
+
+        SET @i = @i + 1;
+    END;
+END;
+GO
+
+CREATE PROCEDURE usp_GetFiguresByArticle
+    @ArticleID VARCHAR(20)
+AS
+BEGIN
+    SELECT
+        SeqID,
+        ArticleID,
+        FigureName,
+        Mode,
+        FigNo,
+        PageNo,
+        IsColor
+    FROM FigureDetails
+    WHERE ArticleID = @ArticleID
+    ORDER BY SeqID;
+END;
+GO
+
+
+CREATE PROCEDURE usp_UpdateFigure
+    @SeqID INT,
+    @Mode VARCHAR(20),
+    @FigNo VARCHAR(10),
+    @PageNo INT,
+    @IsColor BIT
+AS
+BEGIN
+    UPDATE FigureDetails
+    SET
+        Mode = @Mode,
+        FigNo = @FigNo,
+        PageNo = @PageNo,
+        IsColor = @IsColor
+    WHERE SeqID = @SeqID;
+END;
+GO
+
+CREATE PROCEDURE usp_DeleteFigure
+    @SeqID INT
+AS
+BEGIN
+    DELETE FROM FigureDetails
+    WHERE SeqID = @SeqID;
+END;
+GO
+
+
+File: DAL/DBHelper.cs
+
+using Microsoft.Data.SqlClient;
+using System.Data;
+
+namespace Web3.DAL
+{
+    public class DBHelper
+    {
+        private readonly string _connStr;
+
+        public DBHelper(IConfiguration configuration)
+        {
+            _connStr = configuration.GetConnectionString("DefaultConnection");
+        }
+
+        public DataTable ExecuteProcedure(string procName, SqlParameter[] parameters = null)
+        {
+            using SqlConnection con = new SqlConnection(_connStr);
+            using SqlCommand cmd = new SqlCommand(procName, con);
+            cmd.CommandType = CommandType.StoredProcedure;
+
+            if (parameters != null)
+                cmd.Parameters.AddRange(parameters);
+
+            SqlDataAdapter da = new SqlDataAdapter(cmd);
+            DataTable dt = new();
+            da.Fill(dt);
+
+            return dt;
+        }
+
+        public void ExecuteNonQuery(string procName, SqlParameter[] parameters)
+        {
+            using SqlConnection con = new SqlConnection(_connStr);
+            using SqlCommand cmd = new SqlCommand(procName, con);
+            cmd.CommandType = CommandType.StoredProcedure;
+
+            cmd.Parameters.AddRange(parameters);
+
+            con.Open();
+            cmd.ExecuteNonQuery();
+        }
+    }
+}
+
+Folder: Models/ArticleModel.cs
+
+ArticleModel.cs
+namespace Web3.Models
+{
+    public class ArticleModel
+    {
+        public string JournalID { get; set; }
+        public string ArticleID { get; set; }
+    }
+}
+
+FigureModel.cs
+
+namespace Web3.Models
+{
+    public class FigureModel
+    {
+        public int SeqID { get; set; }
+        public string FigureName { get; set; }
+        public string Mode { get; set; }
+        public string FigNo { get; set; }
+        public int PageNo { get; set; }
+        public bool IsColor { get; set; }
+    }
+}
+
+FigureInsertModel.cs
+
+namespace Web3.Models
+{
+    public class FigureInsertModel
+    {
+        public string JournalID { get; set; }
+        public string ArticleID { get; set; }
+        public string SubType { get; set; }
+        public string Mode { get; set; }
+        public int NoOfFigs { get; set; }
+        public int StartPageNo { get; set; }
+        public bool IsColor { get; set; }
+    }
+}
+
+
+Folder: Controllers
+File: FigureController.cs
+
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Data.SqlClient;
+using Web3.DAL;
+using Web3.Models;
+using System.Data;
+
+namespace Web3.Controllers
+{
+    public class FigureController : Controller
+    {
+        private readonly DBHelper _db;
+
+        public FigureController(IConfiguration configuration)
+        {
+            _db = new DBHelper(configuration);
+        }
+
+        public IActionResult Index()
+        {
+            return View();
+        }
+
+        // Journal dropdown
+        [HttpGet]
+        public JsonResult GetJournalIDs()
+        {
+            DataTable dt = _db.ExecuteProcedure("usp_GetJournalIDs");
+
+            var list = dt.AsEnumerable()
+                         .Select(r => r["JournalID"].ToString())
+                         .ToList();
+
+            return Json(list);
+        }
+
+        // Article dropdown
+        [HttpGet]
+        public JsonResult GetArticleIDs(string journalId)
+        {
+            SqlParameter[] p = {
+                new("@JournalID", journalId)
+            };
+
+            DataTable dt = _db.ExecuteProcedure("usp_GetArticleIDsByJournal", p);
+
+            var list = dt.AsEnumerable()
+                         .Select(r => r["ArticleID"].ToString())
+                         .ToList();
+
+            return Json(list);
+        }
+
+        // Add figures
+        [HttpPost]
+        public IActionResult AddFigures([FromBody] FigureInsertModel model)
+        {
+            SqlParameter[] p =
+            {
+                new("@ArticleID", model.ArticleID),
+                new("@SubType", model.SubType),
+                new("@Mode", model.Mode),
+                new("@NoOfFigs", model.NoOfFigs),
+                new("@StartPageNo", model.StartPageNo),
+                new("@IsColor", model.IsColor)
+            };
+
+            _db.ExecuteNonQuery("usp_InsertFigures", p);
+            return Ok();
+        }
+
+        // Grid load / refresh
+        [HttpGet]
+        public JsonResult LoadFigures(string articleId)
+        {
+            SqlParameter[] p = { new("@ArticleID", articleId) };
+            DataTable dt = _db.ExecuteProcedure("usp_GetFiguresByArticle", p);
+
+            var list = new List<FigureModel>();
+
+            foreach (DataRow r in dt.Rows)
+            {
+                list.Add(new FigureModel
+                {
+                    SeqID = (int)r["SeqID"],
+                    FigureName = r["FigureName"].ToString(),
+                    Mode = r["Mode"].ToString(),
+                    FigNo = r["FigNo"].ToString(),
+                    PageNo = (int)r["PageNo"],
+                    IsColor = (bool)r["IsColor"]
+                });
+            }
+
+            return Json(list);
+        }
+
+        // Update
+        [HttpPost]
+        public IActionResult UpdateFigure([FromBody] FigureModel model)
+        {
+            SqlParameter[] p =
+            {
+                new("@SeqID", model.SeqID),
+                new("@Mode", model.Mode),
+                new("@FigNo", model.FigNo),
+                new("@PageNo", model.PageNo),
+                new("@IsColor", model.IsColor)
+            };
+
+            _db.ExecuteNonQuery("usp_UpdateFigure", p);
+            return Ok();
+        }
+
+        // Delete
+        [HttpPost]
+        public IActionResult DeleteFigure(int seqId)
+        {
+            SqlParameter[] p = { new("@SeqID", seqId) };
+            _db.ExecuteNonQuery("usp_DeleteFigure", p);
+            return Ok();
+        }
+    }
+}
+
+
+Views
+ └── Figure
+     └── Index.cshtml
+
+
+     @{
+    ViewData["Title"] = "Figure Details";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<h4 class="mb-3">Figure Entry</h4>
+
+<div class="card mb-3">
+    <div class="card-body">
+        <div class="row g-3">
+
+            <div class="col-md-2">
+                <label>Journal ID</label>
+                <select id="ddlJournal" class="form-select">
+                    <option value="">--Select--</option>
+                </select>
+            </div>
+
+            <div class="col-md-2">
+                <label>Article ID</label>
+                <select id="ddlArticle" class="form-select">
+                    <option value="">--Select--</option>
+                </select>
+            </div>
+
+            <div class="col-md-2">
+                <label>Sub Type</label>
+                <select id="ddlSubType" class="form-select">
+                    <option value="Fig">Fig</option>
+                    <option value="Scheme">Scheme</option>
+                    <option value="Suppl Fig">Suppl Fig</option>
+                </select>
+            </div>
+
+            <div class="col-md-2">
+                <label>Mode</label>
+                <select id="ddlMode" class="form-select">
+                    <option value="Color">Color</option>
+                    <option value="LineArt">LineArt</option>
+                    <option value="3D">3D</option>
+                </select>
+            </div>
+
+            <div class="col-md-1">
+                <label>No of Figs</label>
+                <input id="txtNoOfFigs" type="number" min="1" class="form-control" />
+            </div>
+
+            <div class="col-md-1">
+                <label>Start Page</label>
+                <input id="txtPageNo" type="number" min="1" class="form-control" />
+            </div>
+
+            <div class="col-md-1 d-flex align-items-end">
+                <div class="form-check">
+                    <input id="chkColor" type="checkbox" class="form-check-input" />
+                    <label class="form-check-label">Is Color</label>
+                </div>
+            </div>
+
+            <div class="col-md-1 d-flex align-items-end">
+                <button id="btnAdd" class="btn btn-primary w-100">Add</button>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<div class="mb-2">
+    <button id="btnRefresh" class="btn btn-secondary btn-sm">Refresh</button>
+    <button id="btnUpdate" class="btn btn-success btn-sm">Figure Update</button>
+</div>
+
+<table id="figTable" class="table table-bordered">
+    <thead>
+        <tr>
+            <th>SeqID</th>
+            <th>Figure Name</th>
+            <th>Mode</th>
+            <th>Fig No</th>
+            <th>Page No</th>
+            <th>Is Color</th>
+            <th>Delete</th>
+        </tr>
+    </thead>
+    <tbody></tbody>
+</table>
+
+@section Scripts {
+<script>
+$(document).ready(function () {
+
+    function loadJournals() {
+        $.get('/Figure/GetJournalIDs', function (data) {
+            $('#ddlJournal').append(
+                data.map(j => `<option value="${j}">${j}</option>`)
+            );
+        });
+    }
+
+    function loadArticles(journalId) {
+        $('#ddlArticle').empty().append('<option value="">--Select--</option>');
+        if (!journalId) return;
+
+        $.get('/Figure/GetArticleIDs', { journalId }, function (data) {
+            $('#ddlArticle').append(
+                data.map(a => `<option value="${a}">${a}</option>`)
+            );
+        });
+    }
+
+    function loadFigures() {
+        let articleId = $('#ddlArticle').val();
+        if (!articleId) return;
+
+        $.get('/Figure/LoadFigures', { articleId }, function (data) {
+            let rows = '';
+            $.each(data, function (_, f) {
+                rows += `
+                <tr data-id="${f.seqID}">
+                    <td>${f.seqID}</td>
+                    <td>${f.figureName}</td>
+                    <td>
+                        <select class="form-select form-select-sm mode">
+                            <option ${f.mode=='Color'?'selected':''}>Color</option>
+                            <option ${f.mode=='LineArt'?'selected':''}>LineArt</option>
+                            <option ${f.mode=='3D'?'selected':''}>3D</option>
+                        </select>
+                    </td>
+                    <td><input class="form-control form-control-sm figno" value="${f.figNo}"/></td>
+                    <td><input class="form-control form-control-sm pageno" value="${f.pageNo}"/></td>
+                    <td class="text-center"><input type="checkbox" class="iscolor" ${f.isColor?'checked':''}/></td>
+                    <td class="text-center">
+                        <button class="btn btn-danger btn-sm delete">X</button>
+                    </td>
+                </tr>`;
+            });
+            $('#figTable tbody').html(rows);
+        });
+    }
+
+    loadJournals();
+
+    $('#ddlJournal').change(function () {
+        loadArticles(this.value);
+        $('#figTable tbody').empty();
+    });
+
+    $('#ddlArticle').change(loadFigures);
+
+    $('#btnAdd').click(function () {
+        let model = {
+            articleID: $('#ddlArticle').val(),
+            subType: $('#ddlSubType').val(),
+            mode: $('#ddlMode').val(),
+            noOfFigs: Number($('#txtNoOfFigs').val()),
+            startPageNo: Number($('#txtPageNo').val()),
+            isColor: $('#chkColor').is(':checked')
+        };
+
+        $.ajax({
+            url: '/Figure/AddFigures',
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify(model),
+            success: loadFigures
+        });
+    });
+
+    $('#btnRefresh').click(loadFigures);
+
+    $('#btnUpdate').click(function () {
+        $('#figTable tbody tr').each(function () {
+            let row = $(this);
+            $.ajax({
+                url: '/Figure/UpdateFigure',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({
+                    seqID: row.data('id'),
+                    mode: row.find('.mode').val(),
+                    figNo: row.find('.figno').val(),
+                    pageNo: row.find('.pageno').val(),
+                    isColor: row.find('.iscolor').is(':checked')
+                })
+            });
+        });
+        alert('Updated');
+    });
+
+    $('#figTable').on('click', '.delete', function () {
+        let row = $(this).closest('tr');
+        $.post('/Figure/DeleteFigure', { seqId: row.data('id') }, loadFigures);
+    });
+
+});
+</script>
+}
