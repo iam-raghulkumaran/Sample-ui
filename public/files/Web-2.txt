@@ -1,3 +1,8 @@
+sqllocaldb info
+"ConnectionStrings": {
+  "DefaultConnection": "Server=(localdb)\\MSSQLLocalDB;Database=KGL_Test;Trusted_Connection=True;TrustServerCertificate=True"
+}
+
 USE KGL_Test;
 GO
 CREATE TABLE VendorInfo (
@@ -378,3 +383,130 @@ User edits date
 AJAX → UpdateShipmentDate
         ↓
 Stored Procedure updates DB
+
+
+
+PROJECT OVERVIEW (ASSESSMENT 3 – VENDOR SHIPMENT MANAGEMENT)
+-----------------------------------------------------------
+This project is an ASP.NET MVC application used to manage shipment details
+based on vendor and job title selection. The application displays vendors
+in a jQuery DataTable, dynamically loads related job titles, and allows
+updating shipment dates using stored procedures.
+
+The main focus of this assessment is cascading data loading and inline
+update functionality.
+
+TECHNOLOGIES USED
+-----------------
+- ASP.NET Core MVC for UI and controller logic
+- SQL Server (LocalDB) for database
+- ADO.NET for database access
+- jQuery & jQuery DataTable for dynamic UI
+- Bootstrap for layout and styling
+- AJAX for client-server communication
+
+NUGET PACKAGES INSTALLED
+-----------------------
+- Microsoft.Data.SqlClient
+  Used to connect the MVC application with SQL Server.
+
+- System.Data.SqlClient
+  Used for DataTable, SqlCommand, and SqlParameter support.
+
+DATABASE DESIGN
+---------------
+The database contains two tables:
+
+1. VendorInfo (Master Table)
+   - Stores vendor information.
+   - Used to populate the main vendor table in UI.
+
+2. ShipmentInfo (Transaction Table)
+   - Stores shipment details such as Job Title, Chapter ID, Shipment Date.
+   - Linked to VendorInfo using VendorID.
+
+All database operations are done using stored procedures only.
+
+STORED PROCEDURES USED
+---------------------
+- usp_GetVendors
+  Retrieves all vendors.
+
+- usp_GetJobTitlesByVendor
+  Retrieves distinct job titles for the selected vendor.
+
+- usp_GetShipmentDetails
+  Retrieves shipment details based on vendor and job title.
+
+- usp_UpdateShipmentDate
+  Updates shipment date for a selected shipment.
+
+APPLICATION WORKFLOW
+--------------------
+1. Page Load
+   - The Index page loads.
+   - Vendor list is fetched using usp_GetVendors.
+   - Vendors are displayed in a jQuery DataTable with paging and sorting.
+
+2. Job Title Loading (Cascading Dropdown)
+   - Each vendor row has a Job Title dropdown.
+   - When the dropdown is focused, an AJAX call retrieves Job Titles
+     related to that vendor using usp_GetJobTitlesByVendor.
+
+3. Shipment Detail Display
+   - User selects a Job Title.
+   - An AJAX call fetches shipment details using usp_GetShipmentDetails.
+   - Shipment details are displayed in a second table.
+
+4. Edit & Update Shipment Date
+   - Shipment Date is shown with a calendar (date input).
+   - User modifies the date and clicks the Update button.
+   - An AJAX call sends the updated date to the server.
+   - usp_UpdateShipmentDate updates the database record.
+
+DATA FLOW DIAGRAM
+-----------------
+UI (Index.cshtml)
+  → MVC Controller
+    → DBHelper (ADO.NET)
+      → Stored Procedure
+        → SQL Server
+
+END-TO-END FLOW (SIMPLIFIED)
+----------------------------
+Index page loads vendors
+        ↓
+User focuses Job Title dropdown
+        ↓
+AJAX → GetJobTitlesByVendor
+        ↓
+User selects Job Title
+        ↓
+AJAX → GetShipmentDetails
+        ↓
+User edits Shipment Date
+        ↓
+AJAX → UpdateShipmentDate
+        ↓
+Stored Procedure updates DB
+
+IMPORTANT BUSINESS LOGIC
+------------------------
+- Job Titles are loaded dynamically based on VendorID.
+- Shipment details depend on both VendorID and Job Title.
+- Shipment Date is editable using a calendar control.
+- Paging and sorting are enabled using jQuery DataTable.
+- All updates use stored procedures.
+
+SECURITY & BEST PRACTICES
+------------------------
+- Parameterized SQL prevents SQL injection.
+- Database access is centralized using stored procedures.
+- Clear separation between UI, controller, and database layers.
+
+SUMMARY
+-------
+This application demonstrates cascading dropdowns, master-detail data
+display, and inline data updates using ASP.NET MVC, jQuery DataTable,
+and stored procedures. The design matches real-world enterprise
+workflow patterns.

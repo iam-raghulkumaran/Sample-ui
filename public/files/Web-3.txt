@@ -1,3 +1,8 @@
+sqllocaldb info
+"ConnectionStrings": {
+  "DefaultConnection": "Server=(localdb)\\MSSQLLocalDB;Database=KGL_Test;Trusted_Connection=True;TrustServerCertificate=True"
+}
+
 USE KGL_Test
 GO
 
@@ -555,3 +560,123 @@ $(document).ready(function () {
 });
 </script>
 }
+
+
+PROJECT OVERVIEW (ASSESSMENT 1 – FIGURE ENTRY)
+---------------------------------------------
+This project is an ASP.NET MVC web application used to create, display, update,
+and delete figure details related to articles. The application uses stored
+procedures for database access, Bootstrap for UI, and jQuery for client-side
+interaction.
+
+The key feature of this project is bulk insertion of figure records based on
+the number of figures entered by the user.
+
+TECHNOLOGIES USED
+-----------------
+- ASP.NET Core MVC for application structure
+- SQL Server (LocalDB) for database
+- ADO.NET for database access
+- Bootstrap for UI layout
+- jQuery for AJAX operations
+- jQuery DataTable / dynamic table rendering
+
+NUGET PACKAGES INSTALLED
+-----------------------
+- Microsoft.Data.SqlClient
+  Used to connect the MVC application with SQL Server and execute stored procedures.
+
+- System.Data.SqlClient
+  Provides support for DataTable, SqlCommand, SqlParameter.
+
+DATABASE DESIGN
+---------------
+The database contains two main tables:
+
+1. ArticleInfo (Master Table)
+   - Stores Journal ID and Article ID.
+   - Used to populate dropdown values in the UI.
+
+2. FigureDetails (Transaction Table)
+   - Stores figure-related information for each article.
+   - Includes FigureName, Mode, FigNo, PageNo, and IsColor.
+
+All database operations are done using stored procedures only.
+
+APPLICATION WORKFLOW
+--------------------
+1. Page Load
+   - The Figure Entry page loads.
+   - Journal ID dropdown is populated from ArticleInfo using a stored procedure.
+
+2. Journal Selection
+   - User selects a Journal ID.
+   - Based on the selected Journal ID, the Article ID dropdown is populated.
+
+3. Figure Entry
+   - User selects:
+       • Journal ID
+       • Article ID
+       • Sub Type (Fig / Scheme / Suppl Fig)
+       • Mode (Color / LineArt / 3D)
+       • Number of Figures
+       • Start Page Number
+       • Is Color checkbox
+   - User clicks the Add button.
+
+4. Bulk Insert Logic (Key Feature)
+   - The Add button calls an MVC controller action.
+   - The controller calls a stored procedure.
+   - A loop inside the stored procedure inserts multiple rows.
+   - Example:
+       If No of Figs = 3
+       → Fig1, Fig2, Fig3 are created automatically.
+
+5. Data Display
+   - Inserted records are displayed in a grid/table.
+   - Data is fetched from the database using a stored procedure.
+
+DATA FLOW DIAGRAM
+-----------------
+UI (MVC View)
+  → MVC Controller
+    → DAL (ADO.NET)
+      → Stored Procedure
+        → SQL Server
+
+GRID OPERATIONS
+---------------
+The grid allows the following actions:
+
+1. Refresh
+   - Reloads the data from the database.
+
+2. Update
+   - User edits Mode, Fig No, Page No, or Is Color.
+   - Clicking Update sends the data to the controller.
+   - Stored procedure updates the selected figure records.
+
+3. Delete
+   - User clicks Delete on a row.
+   - The controller calls a delete stored procedure.
+   - The record is removed from the database.
+
+IMPORTANT BUSINESS LOGIC
+------------------------
+- FigureName is auto-generated (Fig1, Fig2, Fig3) based on No of Figs.
+- Page numbers are incremented automatically.
+- All insert, update, and delete operations use stored procedures.
+- No direct SQL queries are written in the MVC code.
+
+SECURITY & BEST PRACTICES
+------------------------
+- Parameterized queries prevent SQL injection.
+- Stored procedures centralize database logic.
+- Clean separation between UI, controller, and database layers.
+
+SUMMARY
+-------
+This application focuses on managing article figure details with bulk insert
+support. The workflow starts from master data selection (Journal and Article),
+followed by automatic figure generation, and supports full CRUD operations
+using stored procedures in a clean MVC architecture.

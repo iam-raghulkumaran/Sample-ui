@@ -1,10 +1,13 @@
 sqllocaldb info
+"ConnectionStrings": {
+  "DefaultConnection": "Server=(localdb)\\MSSQLLocalDB;Database=KGL_Test;Trusted_Connection=True;TrustServerCertificate=True"
+}
 
 
 
-CREATE DATABASE Test_KGL;
+CREATE DATABASE KGL_TEST;
 GO
-USE Test_KGL;
+USE KGL_TEST;
 GO
 
 -- 1. User_Master
@@ -74,7 +77,7 @@ INSERT INTO ArticleInfo (AutoArtID, JBM_AutoID, IntrnlID, ChapterID, ActualPages
 ('U0924', 'OP098', '120002', 'hhs067', 43, 40, NULL);
 
 
-USE Test_KGL;
+USE KGL_TEST;
 GO
 
 -- Login
@@ -154,7 +157,7 @@ Microsoft.AspNetCore.Authentication.Cookies
 
 step - 3 
  "ConnectionStrings": {
-    "DefaultConnection": "Server=.;Database=Test_KGL;Trusted_Connection=True;TrustServerCertificate=True"
+    "DefaultConnection": "Server=.;Database=KGL_TEST;Trusted_Connection=True;TrustServerCertificate=True"
   },
 
 STEP 3 – Create Models (Models Folder)
@@ -502,3 +505,107 @@ Web1
 │
 ├── appsettings.json              ✅ Connection string
 └── Program.cs                    ✅ Auth, routing, DI
+
+
+
+PROJECT OVERVIEW
+----------------
+This project is an ASP.NET Core MVC application where the UI is built using MVC,
+data operations are handled through a Web API, and SQL Server stored procedures
+are used for all database interactions. The application allows authenticated
+users to view article information and assign vendors using a jQuery DataTable.
+
+TECHNOLOGIES USED
+-----------------
+- ASP.NET Core MVC for the user interface
+- ASP.NET Core Web API for data access
+- SQL Server for database
+- jQuery and jQuery DataTable for displaying and managing tabular data
+- Bootstrap for UI styling
+- ADO.NET for database access
+
+NUGET PACKAGES INSTALLED
+-----------------------
+- Microsoft.Data.SqlClient
+  Used to connect ASP.NET Core with SQL Server and execute stored procedures.
+
+- System.Data.SqlClient
+  Provides ADO.NET support for DataTable, SqlCommand, and SqlParameter.
+
+- Microsoft.AspNetCore.Authentication.Cookies
+  Used to implement Forms Authentication for MVC login.
+
+DATABASE DESIGN
+---------------
+The database contains both master and transaction tables:
+
+- User_Master
+  Stores application users and their roles (admin, user, super, vendor).
+
+- Dept_Master
+  Stores department information.
+
+- Vendor_Master
+  Stores vendor details.
+
+- ArticleInfo
+  The main working table that links departments and vendors to articles.
+
+All database operations are performed using stored procedures only.
+No inline SQL queries are used.
+
+AUTHENTICATION FLOW
+-------------------
+1. MVC Authentication (Forms Authentication)
+   - Users log in through the MVC login page.
+   - Credentials are validated using a stored procedure.
+   - Upon successful login, an authentication cookie is created.
+   - Only authenticated users can access secured MVC pages.
+
+2. Web API Authentication (Basic Authentication)
+   - Web API endpoints are protected using Basic Authentication.
+   - Each API request includes a username and password in the request header.
+   - Credentials are validated against the User_Master table.
+   - Unauthorized requests are blocked.
+
+Both MVC and Web API use the same User_Master table but
+different authentication mechanisms.
+
+APPLICATION FLOW
+----------------
+1. User logs into the MVC application.
+2. After login, the user is redirected to the Home page.
+3. The Home page contains a jQuery DataTable.
+4. The DataTable loads article data by calling a secured Web API endpoint.
+5. The Web API fetches data using stored procedures and returns it to the UI.
+6. Paging, sorting, and searching are handled by the DataTable.
+
+DATA FLOW DIAGRAM
+-----------------
+UI (MVC Page)
+  → jQuery AJAX
+    → Web API (Basic Authentication)
+      → Stored Procedure
+        → SQL Server Database
+
+VENDOR ASSIGNMENT FLOW
+---------------------
+1. The user selects one or more records using checkboxes.
+2. The user chooses a vendor from the dropdown list.
+3. An API call is made to assign the vendor.
+4. The Web API updates the ArticleInfo table using a stored procedure.
+5. The DataTable is refreshed to reflect updated data.
+
+SECURITY & BEST PRACTICES
+------------------------
+- All SQL operations use stored procedures.
+- Parameterized queries prevent SQL injection.
+- Authentication is enforced for both MVC and Web API.
+- Clear separation of concerns between UI, API, and database layers.
+
+SUMMARY
+-------
+The application follows a clean layered architecture where MVC handles the UI,
+Web API handles data access, stored procedures handle database logic, and proper
+authentication ensures security. This design closely follows real-world
+enterprise application standards.
