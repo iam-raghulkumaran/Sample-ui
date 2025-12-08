@@ -451,6 +451,44 @@ public class ArticleApiController : ControllerBase
     }
 }
 
+VendorApiController.cs
+
+using Microsoft.AspNetCore.Mvc;
+using System.Data;
+
+[ApiController]
+[Route("api/vendor")]
+[BasicAuth]
+public class VendorApiController : ControllerBase
+{
+    private readonly DbHelper _db;
+
+    public VendorApiController(DbHelper db)
+    {
+        _db = db;
+    }
+
+    [HttpGet]
+    public IActionResult GetVendors()
+    {
+        var dt = _db.ExecuteDataTable("sp_GetVendors");
+        var list = new List<VendorModel>();
+
+        foreach (DataRow row in dt.Rows)
+        {
+            list.Add(new VendorModel
+            {
+                VendorID = Convert.ToInt32(row["VendorID"]),
+                VendorName = row["VendorName"].ToString()
+            });
+        }
+
+        return Ok(list);
+    }
+}
+
+
+
 
 STEP 9 – Home Page + jQuery DataTable
 Controllers/HomeController.cs
@@ -467,7 +505,132 @@ public class HomeController : Controller
     }
 }
 
-Views/Home/Index.cshtml
+##Views/Home/Index.cshtml
+
+@{
+    ViewData["Title"] = "Article List";
+}
+
+<h2>Article List</h2>
+
+<select id="vendorDropdown">
+    <option value="">-- Select Vendor --</option>
+</select>
+
+<button id="btnAssign">Assign Vendor</button>
+
+<hr />
+
+<table id="articleTable" class="display" style="width:100%">
+    <thead>
+        <tr>
+            <th>Select</th>
+            <th>AutoArtID</th>
+            <th>JBM Auto ID</th>
+            <th>Internal ID</th>
+            <th>Chapter</th>
+            <th>Pages</th>
+            <th>Department</th>
+            <th>Vendor</th>
+        </tr>
+    </thead>
+</table>
+
+@section Scripts {
+
+<link rel="stylesheet"
+      href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css" />
+
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+
+<script>
+    var table;
+
+    $(document).ready(function () {
+        loadVendors();
+        loadTable();
+
+        $("#btnAssign").click(function () {
+
+            var vendorId = $("#vendorDropdown").val();
+            if (!vendorId) {
+                alert("Select vendor");
+                return;
+            }
+
+            var selected = [];
+            $(".row-check:checked").each(function () {
+                selected.push($(this).val());
+            });
+
+            if (selected.length === 0) {
+                alert("Select at least one article");
+                return;
+            }
+
+            $.ajax({
+                url: "/api/article/assign",
+                type: "POST",
+                contentType: "application/json",
+                headers: authHeader(),
+                data: JSON.stringify({ VendorID: vendorId, AutoArtIds: selected }),
+                success: function () {
+                    table.ajax.reload();
+                    alert("Vendor assigned successfully");
+                }
+            });
+        });
+    });
+
+    function authHeader() {
+        return { "Authorization": "Basic " + btoa("admin1:xxx") };
+    }
+
+    function loadTable() {
+        table = $("#articleTable").DataTable({
+            destroy: true,
+            ajax: {
+                url: "/api/article",
+                type: "GET",
+                headers: authHeader(),
+                dataSrc: ""
+            },
+            columns: [
+                {
+                    data: "autoArtID",
+                    render: function (data) {
+                        return '<input type="checkbox" class="row-check" value="' + data + '" />';
+                    }
+                },
+                { data: "autoArtID" },
+                { data: "jbmAutoID" },
+                { data: "intrnlID" },
+                { data: "chapterID" },
+                { data: "actualPages" },
+                { data: "deptName" },
+                { data: "vendorName" }
+            ]
+        });
+    }
+
+    function loadVendors() {
+        $.ajax({
+            url: "/api/vendor",
+            type: "GET",
+            headers: authHeader(),
+            success: function (data) {
+                $.each(data, function (i, v) {
+                    $("#vendorDropdown").append(
+                        '<option value="' + v.vendorID + '">' + v.vendorName + '</option>'
+                    );
+                });
+            }
+        });
+    }
+</script>
+}
+
 
 
 Web1
